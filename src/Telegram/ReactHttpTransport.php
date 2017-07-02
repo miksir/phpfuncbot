@@ -57,6 +57,9 @@ class ReactHttpTransport implements Transport
 
     public function send(AbstractMethod $abstractMethod) : PromiseInterface
     {
+        static $counter = 0;
+        $counter++;
+
         $deferred = new Deferred();
 
         $json = null;
@@ -72,29 +75,34 @@ class ReactHttpTransport implements Transport
                     'Content-Length' => strlen($json)
                 ]
             );
-            $this->logger->debug("Outgoing POST {$url}, json: {$json}");
-        } else {
+            $this->logger->debug("HTTP -> #{$counter} POST {$url}; json: {$json}");
+
+        } elseif ($abstractMethod->getHttpMethod() === 'GET') {
             $queryString = build_query($abstractMethod->getParams());
             $request = $this->client->request(
                 $abstractMethod->getHttpMethod(),
                 $url . ($queryString ? "?{$queryString}" : '')
             );
-            $this->logger->debug("Outgoing GET {$url}?{$queryString}");
+            $this->logger->debug("HTTP -> #{$counter} GET {$url}?{$queryString}");
+
+        } else {
+            throw new \InvalidArgumentException("Unknown HTTP method {$abstractMethod->getHttpMethod()} in {$abstractMethod->getMethodName()}");
         }
+
 
         $request->on('error', function (\Exception $error) use ($deferred) {
             $deferred->reject($error);
         });
 
-        $request->on('response', function (Response $response) use ($deferred, $abstractMethod) {
+        $request->on('response', function (Response $response) use ($deferred, $abstractMethod, $counter) {
             $buffer = '';
 
             $response->on('data', function ($chunk) use (&$buffer) {
                 $buffer .= $chunk;
             });
 
-            $response->on('end', function() use ($deferred, &$buffer, $abstractMethod) {
-                $this->logger->debug("-> response: {$buffer}");
+            $response->on('end', function() use ($deferred, &$buffer, $abstractMethod, $counter) {
+                $this->logger->debug("HTTP -> #{$counter} response: {$buffer}");
 
                 $answer = json_decode($buffer, true);
 
@@ -110,7 +118,6 @@ class ReactHttpTransport implements Transport
                 }
 
                 $buffer = null;
-                print_r($answer);
                 $answer = $abstractMethod->buildResult($answer['result'] ?? []);
                 $deferred->resolve($answer);
             });

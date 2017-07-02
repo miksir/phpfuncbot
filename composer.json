@@ -12,8 +12,11 @@
   "require": {
     "react/http": "v0.7.1",
     "react/http-client": "v0.5.2",
-    "steelbotfw/telegram-bot-api": "dev-master",
-    "psr/log": "1.0.2"
+    "steelbotfw/telegram-bot-api": "dev-VO_assert",
+    "psr/log": "1.0.2",
+    "beberlei/assert": "v2.7.6",
+    "react/event-loop": "^0.4",
+    "predis/predis-async": "v0.2.3"
   },
   "autoload": {
     "psr-4": {"phpfuncbot\\": "src/"}
@@ -26,16 +29,35 @@
       "type": "package",
       "package": {
         "name": "steelbotfw/telegram-bot-api",
-        "version": "dev-master",
+        "version": "dev-VO_assert",
         "require": {
         },
         "source": {
           "url": "git@github.com:miksir/telegram-bot-api.git",
           "type": "git",
-          "reference": "master"
+          "reference": "VO_assert"
         },
         "autoload": {
           "psr-4": {"Steelbot\\TelegramBotApi\\": "src"}
+        }
+      }
+    },
+    {
+      "type": "package",
+      "package": {
+        "name": "predis/predis-async",
+        "version": "v0.2.3",
+        "require": {
+          "php": ">=5.3.0",
+          "predis/predis": "0.8.*",
+          "react/event-loop": "^0.4"
+        },
+        "dist": {
+          "url": "https://github.com/nrk/predis-async/archive/v0.2.3.zip",
+          "type": "zip"
+        },
+        "autoload": {
+          "psr-0": {"Predis\\Async": "lib/"}
         }
       }
     }

@@ -40,6 +40,17 @@ class Config
         return $this->get('logger', 'filename');
     }
 
+    public function getServerListen() : string
+    {
+        return $this->get('server', 'listen');
+    }
+
+    public function getServerHTTPPath() : string
+    {
+        return $this->get('server', 'path');
+    }
+
+
     /**
      * @param string $section
      * @param string $key

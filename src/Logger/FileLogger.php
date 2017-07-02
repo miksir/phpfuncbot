@@ -60,7 +60,7 @@ class FileLogger extends AbstractLogger
 
     private function openFile(string $filename)
     {
-        $fh = fopen($filename, 'c');
+        $fh = fopen($filename, 'a');
         $this->fh = $fh;
     }
 }

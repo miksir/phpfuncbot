@@ -1,0 +1,17 @@
+[server]
+listen = 127.0.0.1:8001
+# respond only for HTTP request with `path`, 404 for others
+path = /
+
+[telegram]
+key = <telegram bot key>
+
+[telegram-webhook]
+url = https://test.ru/<random path>/
+max_connections = 5
+
+[logger]
+# only file type supported
+type = file
+# relative of absolute
+filename = phpfuncbot.log

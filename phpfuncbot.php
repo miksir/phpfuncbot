@@ -3,6 +3,7 @@ include __DIR__ . '/vendor/autoload.php';
 
 use phpfuncbot\Config\Config;
 use phpfuncbot\Config\IniLoader;
+use phpfuncbot\Queue\UpdateQueue;
 use phpfuncbot\Telegram\API;
 use phpfuncbot\Telegram\ReactHttpTransport;
 
@@ -13,7 +14,7 @@ $loop = React\EventLoop\Factory::create();
 $api = new API(new ReactHttpTransport($config->getTelegramKey(), $loop, $logger));
 
 $argShort = "h";
-$argLong = ["webhook-install", "run-server", "webhook-info", "webhook-delete"];
+$argLong = ["webhook-install", "server-run", "webhook-info", "webhook-delete"];
 $opts = getopt($argShort, $argLong);
 if (isset($opts['h'])) {
     $opts = [];
@@ -39,6 +40,13 @@ if (isset($opts['webhook-info'])) {
         exit(-1);
     }
     echo print_r($response, true)."\n";
+}
+
+if (isset($opts['server-run'])) {
+    $server = new \phpfuncbot\Telegram\Server($config->getServerListen(), $config->getServerHTTPPath(), new UpdateQueue(), $loop, $logger);
+    $server->run();
+    $loop->run();
+    $logger->info("HTTP server terminated");
 }
 
 if (isset($opts['webhook-delete'])) {

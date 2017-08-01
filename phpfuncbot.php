@@ -21,7 +21,7 @@ if (isset($opts['h'])) {
 }
 
 if (isset($opts['webhook-install'])) {
-    $promise = $api->setWebhook($config->getWebhookUrl(), $config->getWebhookConnectionLimit());
+    $promise = $api->setWebhook($config->getWebhookUrl(), $config->getWebhookConnectionLimit(), ['message', 'inline_query']);
     try {
         $response = \phpfuncbot\Helpers\Promise::await($loop, $promise);
     } catch (\Exception $e) {
@@ -43,7 +43,9 @@ if (isset($opts['webhook-info'])) {
 }
 
 if (isset($opts['server-run'])) {
-    $server = new \phpfuncbot\Telegram\Server($config->getServerListen(), $config->getServerHTTPPath(), new UpdateQueue(), $loop, $logger);
+    $server = new \phpfuncbot\Telegram\Server($config->getServerListen(), $config->getServerHTTPPath(), $loop, $logger);
+    $observer = new \phpfuncbot\Phpfunc\PhpfuncServerObserver($api, $logger);
+    $server->addServerObserver($observer);
     $server->run();
     $loop->run();
     $logger->info("HTTP server terminated");

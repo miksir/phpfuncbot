@@ -75,7 +75,7 @@ class ReactHttpTransport implements Transport
                     'Content-Length' => strlen($json)
                 ]
             );
-            $this->logger->debug("HTTP -> #{$counter} POST {$url}; json: {$json}");
+            $this->logger->info("HTTP -> #{$counter} POST {$url}; json: {$json}");
 
         } elseif ($abstractMethod->getHttpMethod() === 'GET') {
             $queryString = build_query($abstractMethod->getParams());
@@ -83,7 +83,7 @@ class ReactHttpTransport implements Transport
                 $abstractMethod->getHttpMethod(),
                 $url . ($queryString ? "?{$queryString}" : '')
             );
-            $this->logger->debug("HTTP -> #{$counter} GET {$url}?{$queryString}");
+            $this->logger->info("HTTP -> #{$counter} GET {$url}?{$queryString}");
 
         } else {
             throw new \InvalidArgumentException("Unknown HTTP method {$abstractMethod->getHttpMethod()} in {$abstractMethod->getMethodName()}");
@@ -105,6 +105,7 @@ class ReactHttpTransport implements Transport
                 $this->logger->debug("HTTP -> #{$counter} response: {$buffer}");
 
                 $answer = json_decode($buffer, true);
+                $buffer = null;
 
                 if ($answer['ok'] === false) {
                     $exception = new TelegramBotApiException($answer['description'], $answer['error_code']);
@@ -115,9 +116,9 @@ class ReactHttpTransport implements Transport
                     }
 
                     $deferred->reject($exception);
+                    return;
                 }
 
-                $buffer = null;
                 $answer = $abstractMethod->buildResult($answer['result'] ?? []);
                 $deferred->resolve($answer);
             });

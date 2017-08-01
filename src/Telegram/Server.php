@@ -117,7 +117,7 @@ class Server
                 });
 
                 $request->getBody()->on('error', function (\Exception $e) use ($resolve, &$body, $counter, $request) {
-                    $this->logger->debug("HTTP <- #{$counter} {$request->getMethod()} {$request->getUri()}; Response 400 (request decode error: {$e->getMessage()})");
+                    $this->logger->error("HTTP <- #{$counter} {$request->getMethod()} {$request->getUri()}; Response 400 (request decode error: {$e->getMessage()})");
                     $response = new Response(400, ['Content-Type' => 'text/plain'], $e->getMessage());
                     $resolve($response);
                 });

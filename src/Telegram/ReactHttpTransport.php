@@ -65,6 +65,10 @@ class ReactHttpTransport implements Transport
         $json = null;
         $url = $this->url . $this->key . '/' . $abstractMethod->getMethodName();
         $httpMethod = $abstractMethod->getHttpMethod();
+        $queryString = build_query($abstractMethod->getParams());
+        $url .= ($queryString ? '?'.$queryString : '');
+
+        $logUrl = $this->url . '***' . '/' . $abstractMethod->getMethodName() . ($queryString ? '?'.$queryString : '');
 
         if ($httpMethod === "POST") {
 
@@ -77,16 +81,15 @@ class ReactHttpTransport implements Transport
                     'Content-Length' => strlen($json)
                 ]
             );
-            $this->logger->debug("HTTP -> #{$counter} POST {$url}; json: {$json}");
+            $this->logger->debug("HTTP -> #{$counter} {$httpMethod} {$logUrl}; json: {$json}");
 
         } elseif ($httpMethod === 'GET') {
 
-            $queryString = build_query($abstractMethod->getParams());
             $request = $this->client->request(
                 $httpMethod,
-                $url . ($queryString ? "?{$queryString}" : '')
+                $url
             );
-            $this->logger->debug("HTTP -> #{$counter} GET {$url}?{$queryString}");
+            $this->logger->debug("HTTP -> #{$counter} {$httpMethod} {$logUrl}");
 
         } else {
 
@@ -94,19 +97,19 @@ class ReactHttpTransport implements Transport
 
         }
 
-        $request->on('error', function (\Exception $error) use ($deferred, $counter) {
-            $this->logger->error("HTTP -> #{$counter} Request error: {$error->getMessage()}");
+        $request->on('error', function (\Exception $error) use ($deferred, $counter, $httpMethod, $logUrl) {
+            $this->logger->error("HTTP -> #{$counter} {$httpMethod} {$logUrl} Request error: {$error->getMessage()}");
             $deferred->reject($error);
         });
 
-        $request->on('response', function (Response $response) use ($deferred, $abstractMethod, $counter, $httpMethod, $url) {
+        $request->on('response', function (Response $response) use ($deferred, $abstractMethod, $counter, $httpMethod, $logUrl) {
             $buffer = '';
 
             $response->on('data', function ($chunk) use (&$buffer) {
                 $buffer .= $chunk;
             });
 
-            $response->on('end', function() use ($deferred, &$buffer, $abstractMethod, $counter, $httpMethod, $url) {
+            $response->on('end', function() use ($deferred, &$buffer, $abstractMethod, $counter, $httpMethod, $logUrl) {
                 $this->logger->debug("HTTP -> #{$counter} Response: {$buffer}");
 
                 $answer = json_decode($buffer, true);
@@ -120,7 +123,7 @@ class ReactHttpTransport implements Transport
                         $exception->setParameters($parameters);
                     }
 
-                    $this->logger->error("HTTP -> #{$counter} API error {$exception->getCode()}: {$exception->getMessage()}");
+                    $this->logger->error("HTTP -> #{$counter} {$httpMethod} {$logUrl} Response error {$exception->getCode()}: {$exception->getMessage()}");
 
                     $deferred->reject($exception);
                     return;
@@ -128,7 +131,7 @@ class ReactHttpTransport implements Transport
 
                 $answer = $abstractMethod->buildResult($answer['result'] ?? []);
 
-                $this->logger->info("HTTP -> #{$counter} {$httpMethod} {$url} success");
+                $this->logger->info("HTTP -> #{$counter} {$httpMethod} {$logUrl} Success");
 
                 $deferred->resolve($answer);
             });

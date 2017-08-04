@@ -1,0 +1,30 @@
+---
+- hosts: localhost
+  any_errors_fatal: true
+
+  vars:
+    userlocale: "ru_RU.UTF-8"
+    baseuser: "{{ ansible_env.USER }}"
+    homedir: "{{ ansible_env.HOME }}"
+    projectdir: "{{ ansible_env.HOME }}/project"
+
+  environment:
+    LC_CTYPE: "{{ userlocale }}"
+    LC_COLLATE: "{{ userlocale }}"
+
+  tasks:
+    - name: "Test composer.json exists"
+      stat: path={{ projectdir }}/composer.json
+      register: composerjson_stat
+      tags: ["composer"]
+    - debug: msg="***** Next action (composer install) can take a long time (>5 min) *****"
+      tags: ["composer"]
+    - name: "composer install"
+      shell: "{{ homedir }}/bin/composer install --no-interaction"
+      args:
+        chdir: "{{ projectdir }}"
+      when: "composerjson_stat.stat.exists == True"
+      register: composer_update
+      changed_when: "'Nothing to install or update' not in composer_update.stderr"
+      tags: ["composer"]
+

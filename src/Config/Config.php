@@ -50,6 +50,10 @@ class Config
         return $this->get('server', 'path');
     }
 
+    public function getRedisServer(): string
+    {
+        return $this->get('redis', 'server');
+    }
 
     /**
      * @param string $section

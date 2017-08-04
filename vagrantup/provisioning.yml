@@ -1,0 +1,644 @@
+---
+- hosts: localhost
+  any_errors_fatal: true
+
+  vars:
+    phpinilist:
+      - { regexp: '(?i)^;?cgi\.fix_pathinfo\s*=', line: "cgi.fix_pathinfo = 0" }
+      - { regexp: '(?i)^;?date\.timezone\s*=', line: "date.timezone = Europe/Moscow" }
+      - { regexp: '(?i)^;?max_execution_time\s*=', line: "max_execution_time = 600" }
+      - { regexp: '(?i)^;?max_input_time\s*=', line: "max_input_time = 600" }
+      - { regexp: '(?i)^;?memory_limit\s*=', line: "memory_limit = 256M" }
+      - { regexp: '(?i)^;?post_max_size\s*=', line: "post_max_size = 100M" }
+      - { regexp: '(?i)^;?upload_max_filesize\s*=', line: "upload_max_filesize = 100M" }
+      - { regexp: '(?i)^;?sendmail_path\s*=', line: "sendmail_path = /usr/sbin/sendmail -t -i -f '<>'" }
+    phpinilist_dev:
+      - { regexp: '(?i)^;?display_errors\s*=', line: "display_errors = On" }
+    phpinilist_prod:
+      - { regexp: '(?i)^;?display_errors\s*=', line: "display_errors = Off" }
+    userlocale: "ru_RU.UTF-8"
+    baseuser: "{{ ansible_env.USER }}"
+    homedir: "{{ ansible_env.HOME }}"
+    projectdir: "{{ ansible_env.HOME }}/project"
+    sqlpassword: "{{ ansible_env.USER }}"
+    phpVersion: 7.0
+
+  environment:
+    LC_CTYPE: "{{ userlocale }}"
+    LC_COLLATE: "{{ userlocale }}"
+
+  tasks:
+    - set_fact:
+        prod_env: true
+      tags: ["always"]
+    - set_fact:
+        prod_env: false
+      tags: ["dev", "always"]
+    - set_fact:
+        phpVersion: 7.1
+      tags: ["php71"]
+
+    - name: "Additional locales"
+      become: true
+      locale_gen: name="{{ userlocale }}" state=present
+      tags: ["always"]
+    - name: "Add default LC_CTYPE locale"
+      become: true
+      lineinfile: dest=/etc/default/locale state=present regexp="^LC_CTYPE=" line="LC_CTYPE={{ userlocale }}"
+      tags: ["always"]
+    - name: "Add default LC_COLLATE locale"
+      become: true
+      lineinfile: dest=/etc/default/locale state=present regexp="^LC_COLLATE=" line="LC_COLLATE={{ userlocale }}"
+      tags: ["always"]
+
+#    - name: "Add Debian testing repository"
+#      become: true
+#      apt_repository: repo="deb http://httpredir.debian.org/debian testing main contrib" update_cache=no
+#      tags: ["always"]
+#    - name: "Debian testing pref"
+#      become: true
+#      blockinfile:
+#        create: yes
+#        dest: /etc/apt/preferences.d/testing
+#        marker: "Explanation: {mark} ANSIBLE MANAGED BLOCK"
+#        block: |
+#          Package: *
+#          Pin: release a=testing
+#          Pin-Priority: -10
+#      tags: ["always"]
+
+    # some system packages
+    - name: "Update APT cache"
+      become: true
+      apt: update_cache=yes cache_valid_time=3600
+      tags: ["always"]
+
+    - name: "Update CA list"
+      become: true
+      apt: name=ca-certificates state=latest
+      tags: ["always"]
+    - name: "Installing system packages"
+      become: true
+      apt:
+        name:
+          - apt-transport-https
+          - debconf-utils
+        state: latest
+      tags: ["always"]
+    - name: "Installing helper packages"
+      become: true
+      apt:
+        name:
+          - wget
+          - git
+          - unzip
+          - screen
+          - joe
+        state: latest
+      tags: ["always"]
+#    - name: "Install python-pexpect"
+#      apt: name="python-pexpect" default_release="testing"
+#      become: true
+#      tags: ["always"]
+
+
+    # we want to collect all repository changes in one place for reduce update time
+    - name: "Dotdeb Repository key"
+      become: true
+      apt_key: url="https://www.dotdeb.org/dotdeb.gpg"
+      tags: ["php7", "dotdeb"]
+    - name: "Dotdeb Repository"
+      become: true
+      apt_repository: repo="deb http://packages.dotdeb.org jessie all" update_cache=no
+      tags: ["php7", "dotdeb"]
+    - name: "Sury Repository key"
+      become: true
+      apt_key: url="https://packages.sury.org/php/apt.gpg"
+      tags: ["php71"]
+    - name: "Sury Repository"
+      become: true
+      apt_repository: repo="deb https://packages.sury.org/php/ jessie main" update_cache=no
+      tags: ["php71"]
+    - name: "Repository key for PostgreSQL"
+      become: true
+      apt_key: url="https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+      tags: ["postgresql"]
+    - name: "Repository for PostgreSQL"
+      become: true
+      apt_repository: repo="deb http://apt.postgresql.org/pub/repos/apt/ trusty-pgdg main" update_cache=no
+      tags: ["postgresql"]
+    - name: "MySQL key"
+      become: true
+      apt_key: keyserver=pgp.mit.edu id=5072E1F5 keyring=/etc/apt/trusted.gpg.d/mysql.gpg
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL 5.6 repository exists"
+      become: true
+      apt_repository: repo="deb http://repo.mysql.com/apt/debian/ jessie mysql-5.6" update_cache=no
+      tags: ["mysql56"]
+    - name: "MySQL 5.6 repository not exists"
+      become: true
+      apt_repository: repo="deb http://repo.mysql.com/apt/debian/ jessie mysql-5.6" state=absent update_cache=no
+      tags: ["mysql57"]
+    - name: "MySQL 5.7 repository exists"
+      become: true
+      apt_repository: repo="deb http://repo.mysql.com/apt/debian/ jessie mysql-5.7" update_cache=no
+      tags: ["mysql57"]
+    - name: "MySQL 5.7 repository not exists"
+      become: true
+      apt_repository: repo="deb http://repo.mysql.com/apt/debian/ jessie mysql-5.7" state=absent update_cache=no
+      tags: ["mysql56"]
+    - name: "Repository key for Elasticsearch"
+      become: true
+      apt_key: url="https://packages.elastic.co/GPG-KEY-elasticsearch"
+      tags: ["elasticsearch"]
+    - name: "Repository for Elasticsearch 2.x"
+      become: true
+      apt_repository: repo="deb https://packages.elastic.co/elasticsearch/2.x/debian stable main" update_cache=no
+      tags: ["elasticsearch"]
+    - name: "Launchpad webupd8team-java key"
+      become: true
+      apt_key: keyserver=keyserver.ubuntu.com id=0xEEA14886 keyring=/etc/apt/trusted.gpg.d/webupd8team-java.gpg
+      tags: ["elasticsearch", "java"]
+    - name: "Launchpad webupd8team-java repository"
+      become: true
+      apt_repository: repo="deb http://ppa.launchpad.net/webupd8team/java/ubuntu xenial main" update_cache=no
+      tags: ["elasticsearch", "java"]
+    - name: "Repository key for NodeJS"
+      become: true
+      apt_key: url="https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+      tags: ["nodejs"]
+    - name: "Repository for NodeJS 6.x"
+      become: true
+      apt_repository: repo="deb https://deb.nodesource.com/node_6.x jessie main" update_cache=no
+      tags: ["nodejs"]
+    - name: "Yarn key"
+      become: true
+      apt_key: url="https://dl.yarnpkg.com/debian/pubkey.gpg"
+      tags: ["yarn", "yarn_replace_npm"]
+    - name: "Repository for Yarn"
+      become: true
+      apt_repository: repo="deb https://dl.yarnpkg.com/debian/ stable main" update_cache=no
+      tags: ["yarn", "yarn_replace_npm"]
+    - name: "Update APT cache"
+      become: true
+      apt: update_cache=yes
+      tags: ["always"]
+
+    # fix exim
+    - name: "install exim4"
+      become: true
+      apt: name="exim4" state=present
+      tags: ["exim"]
+    - name: "remove exim config files"
+      file: path={{ item }} state=absent
+      become: true
+      with_items:
+        - "/etc/exim4/update-exim4.conf.conf"
+        - "/etc/mailname"
+      tags: ["exim"]
+    - name: "Debconf question dc_eximconfig_configtype"
+      become: true
+      debconf:
+        name: 'exim4-config'
+        question: 'exim4/dc_eximconfig_configtype'
+        value: 'internet site; mail is sent and received directly using SMTP'
+        vtype: select
+      tags: ["exim"]
+    - name: "Debconf question mailname"
+      become: true
+      debconf:
+        name: 'exim4-config'
+        question: 'exim4/mailname'
+        value: '{{ inventory_hostname }}'
+        vtype: string
+      tags: ["exim"]
+    - name: "Reconfigure package exim4-config"
+      become: true
+      command: dpkg-reconfigure -fnoninteractive exim4-config
+      tags: ["exim"]
+
+    # postgresql vibes
+    - name: "Installing PosrgeSQL 9.6"
+      become: true
+      apt: name="postgresql-9.6"
+      tags: ["postgresql"]
+    - name: "Postgresql package for Ansible"
+      become: true
+      apt: name="python-psycopg2"
+      tags: ["postgresql"]
+    - name: "Start Postgresql"
+      become: true
+      service: name=postgresql state=started enabled=yes
+      tags: ["postgresql"]
+    - name: "Postgresql user '{{ baseuser }}' with password '{{ sqlpassword }}'"
+      become: true
+      become_user: postgres
+      postgresql_user: name={{ baseuser }} password={{ sqlpassword }}
+      tags: ["postgresql"]
+    - name: "Postgresql database '{{ baseuser }}' with {{ userlocale }} locale"
+      become: true
+      become_user: postgres
+      postgresql_db: encoding=UTF-8 lc_collate={{ userlocale }} lc_ctype={{ userlocale }} name={{ baseuser }} owner={{ baseuser }} template=template0
+      tags: ["postgresql"]
+    - name: "Postgresql database '{{ baseuser }}_test' with {{ userlocale }} locale"
+      become: true
+      become_user: postgres
+      postgresql_db: encoding=UTF-8 lc_collate={{ userlocale }} lc_ctype={{ userlocale }} name={{ baseuser }}_test owner={{ baseuser }} template=template0
+      tags: ["postgresql", "dev"]
+    - name: "Postgresql 'postgres' user password = '{{ sqlpassword }}'"
+      become: true
+      become_user: postgres
+      postgresql_user: name=postgres password={{ sqlpassword }}
+      tags: ["postgresql", "dev"]
+    - name: "Postgresql listen all intrefaces (for connect from host machine)"
+      become: true
+      lineinfile: dest=/etc/postgresql/9.6/main/postgresql.conf state=present regexp='(?i)^#?listen_addresses\s*=' line="listen_addresses = '*'"
+      notify:
+        - restart postgresql
+      tags: ["postgresql", "dev"]
+    - name: "Postgresql allow password auth from any IP addresses"
+      become: true
+      lineinfile: dest=/etc/postgresql/9.6/main/pg_hba.conf state=present line="host all all all md5"
+      notify:
+        - restart postgresql
+      tags: ["postgresql", "dev"]
+
+    # mysql
+    - name: "Installing MySQL"
+      become: true
+      apt: name="mysql-community-server"
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL package for Ansible"
+      become: true
+      apt: name="python-mysqldb"
+      tags: ["mysql56", "mysql57"]
+    - name: "Start MySQL"
+      become: true
+      service: name=mysql state=started enabled=yes
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL test empty root password"
+      mysql_user : name=root login_user=root login_password=""
+      ignore_errors: yes
+      register: mysqlroot_test
+      tags: ["mysql56"]
+    - name: "MySQL generate root password for local access"
+      shell: </dev/urandom tr -dc '1234567890!@#$%qwertyuiopQWERTYUIOPasdfghjklASDFGHJKLzxcvbnmZXCVBNM' | head -c25
+      register: mysqlroot_passwd
+      changed_when: false
+      tags: ["mysql56"]
+    - name: "MySQL create /root/.my.cnf file with password"
+      ini_file: dest="/root/.my.cnf" section="client" option="{{ item.key }}" value="{{ item.value }}" create=yes
+      with_dict:
+        user: "root"
+        password: "\"{{ mysqlroot_passwd.stdout|default() }}\""
+      become: true
+      when: mysqlroot_test|succeeded
+      tags: ["mysql56"]
+    - name: "MySQL change root password for local access"
+      mysql_user : name=root login_user=root login_password="" password="{{ mysqlroot_passwd.stdout }}" host_all=yes
+      when: mysqlroot_test|succeeded
+      tags: ["mysql56"]
+    - name: "MySQL allow remote root access with password '{{ sqlpassword }}'"
+      mysql_user : name=root password="{{ sqlpassword }}" host="%" config_file=/root/.my.cnf
+      become: true
+      tags: ["mysql56", "mysql57", "dev"]
+    - name: "MySQL user '{{ baseuser }}' with password '{{ sqlpassword }}'"
+      mysql_user : name="{{ baseuser }}" password="{{ sqlpassword }}" priv="{{ baseuser }}.*:ALL"
+      become: true
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL database '{{ baseuser }}'"
+      mysql_db : encoding=utf8 name="{{ baseuser }}"
+      become: true
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL config in {{ homedir }}/.my.cnf"
+      ini_file: dest="{{ homedir }}/.my.cnf" section="client" option="{{ item.key }}" value="{{ item.value }}" create=yes
+      with_dict:
+        user: "{{ baseuser }}"
+        password: "{{ sqlpassword }}"
+        database: "{{ baseuser }}"
+      tags: ["mysql56", "mysql57"]
+    - name: "MySQL user '{{ baseuser }}' for connect from host machine"
+      mysql_user : name="{{ baseuser }}" password="{{ sqlpassword }}" priv="{{ baseuser }}.*:ALL" host="%"
+      become: true
+      tags: ["mysql56", "mysql57", "dev"]
+    - name: "MySQL listen all intrefaces (for connect from host machine)"
+      become: true
+      replace: dest=/etc/mysql/my.cnf regexp='(?i)^#?\s*bind-address\s*=.*$' replace="bind-address = 0.0.0.0"
+      notify:
+        - restart mysql
+      tags: ["mysql56", "dev"]
+    - name: "MySQL listen all intrefaces (for connect from host machine)"
+      become: true
+      replace: dest=/etc/mysql/mysql.conf.d/mysqld.cnf regexp='(?i)^#?\s*bind-address\s*=.*$' replace="bind-address = 0.0.0.0"
+      notify:
+        - restart mysql
+      tags: ["mysql57", "dev"]
+# this can be enabled manually for legacy code
+#    - name: "MySQL disable strict"
+#      become: true
+#      replace: dest=/usr/my.cnf regexp='(?i)^#?\s*sql_mode\s*=.*$' replace="sql_mode=NO_ENGINE_SUBSTITUTION"
+#      notify:
+#        - restart mysql
+#      tags: ["mysql56", "mysql57"]
+
+    # redis
+    - name: "Install Redis server"
+      apt: name=redis-server
+      become: true
+      notify:
+        - restart redis-server
+      tags: ["redis"]
+
+    # all about php7
+    - name: "Installing PHP {{ phpVersion }}"
+      become: true
+      apt:
+        name:
+          - php{{ phpVersion }}-fpm
+          - php{{ phpVersion }}-cli
+          - php{{ phpVersion }}-mcrypt
+          - php{{ phpVersion }}-readline
+          - php{{ phpVersion }}-json
+          - php{{ phpVersion }}-opcache
+          - php{{ phpVersion }}-curl
+          - php{{ phpVersion }}-gd
+          - php{{ phpVersion }}-imagick
+          - php{{ phpVersion }}-intl
+          - php{{ phpVersion }}-mbstring
+          - php{{ phpVersion }}-xml
+        state: latest
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+    - name: "Installing PHP {{ phpVersion }} PG extension"
+      become: true
+      apt: name="php{{ phpVersion }}-pgsql" state=latest
+      notify:
+        - restart php
+      tags: ["php7_pgsql"]
+    - name: "Installing PHP {{ phpVersion }} MySQL extension"
+      become: true
+      apt: name="php{{ phpVersion }}-mysql" state=latest
+      notify:
+        - restart php
+      tags: ["php7_mysql"]
+    - name: "Installing PHP {{ phpVersion }} Redis extension"
+      become: true
+      apt: name="php{{ phpVersion }}-redis" state=latest
+      notify:
+        - restart php
+      tags: ["php7_redis"]
+    - name: "Installing PHP {{ phpVersion }} dev extensions"
+      become: true
+      apt:
+        name:
+          - php{{ phpVersion }}-xdebug
+        state: latest
+      notify:
+        - restart php
+      tags: ["php7", "php71", "dev"]
+    - name: "Fix FPM php.ini"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/fpm/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist }}"
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+    - name: "Fix FPM php.ini for dev envelopment"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/fpm/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist_dev }}"
+      notify:
+        - restart php
+      tags: ["php7", "php71", "dev"]
+    - name: "Fix FPM php.ini for prod envelopment"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/fpm/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist_prod }}"
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+      when: prod_env | bool
+    - name: "Fix CLI php.ini"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/cli/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist }}"
+      tags: ["php7", "php71"]
+    - name: "Fix CLI php.ini for dev envelopment"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/cli/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist_dev }}"
+      tags: ["php7", "php71", "dev"]
+    - name: "Fix CLI php.ini for prod envelopment"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/cli/php.ini state=present regexp="{{ item.regexp }}" line="{{ item.line }}"
+      with_items: "{{ phpinilist_prod }}"
+      tags: ["php7", "php71"]
+      when: prod_env | bool
+    - name: "Enable opcache"
+      become: true
+      lineinfile: dest=/etc/php/{{ phpVersion }}/fpm/php.ini state=present regexp='(?i)^;?opcache\.enable\s*=' line="opcache.enable = 1"
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+    - name: "Remove default www pool from php-fpm"
+      become: true
+      file: path=/etc/php/{{ phpVersion }}/fpm/pool.d/www.conf state=absent
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+    - name: "Setup new php-fpm pool for prod envelopment"
+      become: true
+      ini_file: dest=/etc/php/{{ phpVersion }}/fpm/pool.d/{{ baseuser }}.conf section={{ baseuser }} option="{{ item.key }}" value="{{ item.value }}" create=yes
+      with_dict:
+        user: "{{ baseuser }}"
+        group: "{{ baseuser }}"
+        listen: 0.0.0.0:7000
+        pm: static
+        pm.max_children: 10
+        pm.max_requests: 10000
+        request_terminate_timeout: 650
+      notify:
+        - restart php
+      tags: ["php7", "php71"]
+      when: prod_env | bool
+    - name: "Edit php-fpm pool for dev envelopment"
+      become: true
+      ini_file: dest=/etc/php/{{ phpVersion }}/fpm/pool.d/{{ baseuser }}.conf section={{ baseuser }} option="{{ item.key }}" value="{{ item.value }}" create=yes
+      with_dict:
+        user: "{{ baseuser }}"
+        group: "{{ baseuser }}"
+        listen: 0.0.0.0:7000
+        pm: dynamic
+        pm.max_children: 5
+        pm.min_spare_servers: 2
+        pm.max_spare_servers: 4
+        request_terminate_timeout: 0
+      notify:
+        - restart php
+      tags: ["php7", "php71", "dev"]
+    - name: "Enable Remote Xdebug"
+      become: true
+      ini_file: dest=/etc/php/{{ phpVersion }}/fpm/conf.d/20-xdebug-config.ini section=xdebug option="{{ item.key }}" value="{{ item.value }}" create=yes
+      with_dict:
+        xdebug.remote_enable: on
+        xdebug.remote_host: "localhost"
+        xdebug.remote_port: 9000
+        xdebug.remote_connect_back: on
+      notify:
+        - restart php
+      tags: ["php7", "php71", "dev"]
+    - name: "Remove xdebug for cli"
+      become: true
+      file: path=/etc/php/{{ phpVersion }}/cli/conf.d/20-xdebug.ini state=absent
+      notify:
+        - restart php
+      tags: ["php7", "php71", "dev"]
+
+    # all about nginx
+    - name: "Install nginx"
+      become: true
+      apt: name="nginx"
+      tags: ["nginx"]
+    - name: "Remove default Nginx config"
+      become: true
+      file: path=/etc/nginx/sites-enabled/default state=absent
+      notify:
+        - restart nginx
+      tags: ["nginx"]
+    - name: "Copy Nginx prepared config"
+      become: true
+      template: src=templates/nginx.conf dest=/etc/nginx/conf.d/{{ baseuser }}.conf
+      notify:
+        - restart nginx
+      tags: ["nginx"]
+    - name: "Nginx: sendfile off for vagrant"
+      become: true
+      lineinfile: dest=/etc/nginx/nginx.conf state=present backrefs=yes regexp="^([\s\t]*)sendfile.+;$" line="\1sendfile off;"
+      notify:
+        - restart nginx
+      tags: ["nginx", "dev"]
+    - name: "Nginx: enable default gzip settings"
+      become: true
+      replace: dest=/etc/nginx/nginx.conf regexp="^([\s\t]*)#\s+(gzip_.+)" replace="\1\2"
+      notify:
+        - restart nginx
+      tags: ["nginx"]
+    - name: "Nginx: hide server token"
+      become: true
+      lineinfile: dest=/etc/nginx/nginx.conf state=present backrefs=yes regexp="^([\s\t]*)#\s+(server_tokens.+)" line="\1\2"
+      notify:
+        - restart nginx
+      tags: ["nginx"]
+
+    # Oracle java
+    - name: "Set Oracle Java licence"
+      become: true
+      shell: "echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | debconf-set-selections"
+      tags: ["elasticsearch", "java"]
+    - debug: msg="***** Next action (java install) can take a long time (>5 min) *****"
+      tags: ["elasticsearch", "java"]
+    - name: "Install Oracle Java installer"
+      become: true
+      apt: name="oracle-java8-installer"
+      tags: ["elasticsearch", "java"]
+
+    # Elasticsearch
+    - name: "Install elasticsearch"
+      become: true
+      apt: name="elasticsearch"
+      tags: ["elasticsearch"]
+    - name: "Allow elastic to listen all interfaces"
+      become: true
+      lineinfile:
+        dest: /etc/elasticsearch/elasticsearch.yml
+        state: present
+        regexp: '(?i)^#?\s*network.host:.*$'
+        line: 'network.host: 0.0.0.0'
+      notify:
+        - restart elasticsearch
+      tags: ["elasticsearch", "dev"]
+
+    # composer
+    - name: "Is composer installed?"
+      stat: path={{ homedir }}/bin/composer
+      register: composer_stat
+      tags: ["composer"]
+    - name: "Install composer"
+      shell: "sh {{ projectdir }}/vagrantup/composer_install.sh"
+      when: "composer_stat.stat.exists == False"
+      tags: ["composer"]
+    - name: "Composer self update"
+      shell: "{{ homedir }}/bin/composer selfupdate"
+      register: composer_selfupdate
+      when: "composer_stat.stat.exists == True"
+      tags: ["composer"]
+      changed_when: "'You are already using composer' not in composer_selfupdate.stdout"
+
+    # yii2 fix
+    - name: "Yii2 composer fix"
+      shell: "{{ homedir }}/bin/composer global require \"fxp/composer-asset-plugin:^1.2.0\""
+      register: yii2_composer_stat
+      changed_when: "'Nothing to install or update' not in yii2_composer_stat.stderr"
+      tags: ["yii2"]
+
+    # nodeJS
+    - name: "Install NodeJs 6"
+      become: true
+      apt: name="nodejs" state=latest
+      tags: ["nodejs"]
+    - name: "Install Yarn"
+      become: true
+      apt: name="yarn" state=latest
+      tags: ["yarn", "yarn_replace_npm"]
+    - name: "Replace npm with yarn"
+      file: state=link src=/usr/share/yarn/bin/yarn dest=/usr/bin/npm force=yes
+      become: true
+      tags: ["yarn_replace_npm"]
+
+    # sphinx
+    - name: "Install sphinxsearch"
+      become: true
+      apt: name="sphinxsearch" state=latest
+      tags: ["sphinx"]
+    - name: "Allow sphinxsearch to start"
+      become: true
+      lineinfile:
+        dest: /etc/default/sphinxsearch
+        state: present
+        regexp: '(?i)^#?\s*START=.*$'
+        line: 'START=yes'
+      tags: ["sphinx"]
+      notify:
+        - restart sphinxsearch
+    - name: "Copy sphinxsearch prepared config"
+      become: true
+      template: src=templates/sphinx.conf dest=/etc/sphinxsearch/sphinx.conf
+      notify:
+        - restart sphinxsearch
+      tags: ["sphinx"]
+
+  handlers:
+    - name: restart php
+      become: true
+      service: name=php{{ phpVersion }}-fpm state=restarted enabled=yes
+    - name: restart nginx
+      become: true
+      service: name=nginx state=restarted enabled=yes
+    - name: restart postgresql
+      become: true
+      service: name=postgresql state=restarted enabled=yes
+    - name: restart elasticsearch
+      become: true
+      service: name=elasticsearch state=restarted enabled=yes
+    - name: restart mysql
+      become: true
+      service: name=mysql state=restarted enabled=yes
+    - name: restart redis-server
+      become: true
+      service: name=redis-server state=restarted  enabled=yes
+    - name: restart sphinxsearch
+      become: true
+      shell: "service sphinxsearch stop && sleep 2 && service sphinxsearch start"
+      args:
+        warn: false

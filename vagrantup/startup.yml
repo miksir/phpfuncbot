@@ -1,0 +1,60 @@
+---
+- hosts: localhost
+  any_errors_fatal: true
+
+  vars:
+    userlocale: "ru_RU.UTF-8"
+    baseuser: "{{ ansible_env.USER }}"
+    homedir: "{{ ansible_env.HOME }}"
+    projectdir: "{{ ansible_env.HOME }}/project"
+    phpVersion: 7.1
+
+  environment:
+    LC_CTYPE: "{{ userlocale }}"
+    LC_COLLATE: "{{ userlocale }}"
+
+  tasks:
+    - name: php started
+      service: name="php{{ phpVersion }}-fpm" state=restarted
+      become: true
+      tags: ["php7"]
+    - name: nginx started
+      service: name=nginx state=restarted
+      become: true
+      tags: ["nginx"]
+    - name: postgresql started
+      service: name=postgresql state=restarted
+      become: true
+      tags: ["postgresql"]
+    - name: elasticsearch started
+      service: name=elasticsearch state=restarted
+      become: true
+      tags: ["elasticsearch"]
+    - name: redis-server started
+      service: name=redis-server state=restarted
+      become: true
+      tags: ["redis"]
+
+#    - name: "Test webpack.config.js exists"
+#      stat: path={{ projectdir }}/webpack.config.js
+#      register: webpackconfig_stat
+#    - name: "Run webpack watch --watch-poll in virtual terminal (screen)"
+#      shell: "screen -S webpack -Q select . || $(screen -dmS webpack /bin/bash; sleep 1; screen -S webpack -X stuff '{{ homedir }}/bin/webpack --watch\n')"
+#      args:
+#        chdir: "{{ projectdir }}"
+#      when: "webpackconfig_stat.stat.exists == True"
+#      register: webpack_start
+#      changed_when: 'webpack_start.rc'
+#      failed_when: false
+
+#    - name: "Test server.js exists"
+#      stat: path={{ projectdir }}/server.js
+#      register: serverjs_stat
+#    - name: "Run nodejs server in virtual terminal (screen)"
+#      shell: "screen -S nodejs -Q select . || $(screen -dmS nodejs /bin/bash; sleep 1; screen -S nodejs -X stuff 'node server.js\n')"
+#      args:
+#        chdir: "{{ projectdir }}"
+#      register: node_start
+#      when: "serverjs_stat.stat.exists == True"
+#      changed_when: 'node_start.rc'
+#      failed_when: false

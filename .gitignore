@@ -20,3 +20,7 @@
 vendor/
 phpfuncbot.log
 phpfuncbot.ini
+
+.vagrant/
+vagrantup/ansible/
+vagrantup/provisioning.retry

@@ -36,8 +36,14 @@ class PhpfuncServerObserver implements ServerObserver
     public function handleUpdateRequest(Update $update)
     {
         if ($update->inlineQuery instanceof InlineQuery) {
+            $query = $update->inlineQuery->query;
+            $results = [];
+            if ($query) {
+                $trigrams = $this->createTrigrams($query);
+            }
+
             $results = [
-                new InlineQueryResultArticle(1, 'Test 1', new InputTextMessageContent('Hello test 1')),
+                new InlineQueryResultArticle(1, $update->inlineQuery->query, new InputTextMessageContent('Hello test 1')),
                 new InlineQueryResultArticle(2, 'Test 2', new InputTextMessageContent('Hello test 2')),
                 new InlineQueryResultArticle(3, 'Test 3', new InputTextMessageContent('Hello test 3')),
             ];
@@ -47,5 +53,19 @@ class PhpfuncServerObserver implements ServerObserver
             );
             $this->api->answerInlineQuery($answer);
         }
+    }
+
+    /**
+     * @param string $text
+     * @return array|string[]
+     */
+    private function createTrigrams(string $text): array
+    {
+        $trigrams = [];
+        $count = strlen($text)+2;
+        for ($i=0; $i<$count; $i++) {
+            $trigrams[] = substr($text, max($i-2, 0), min($i+1,3));
+        }
+        return $trigrams;
     }
 }

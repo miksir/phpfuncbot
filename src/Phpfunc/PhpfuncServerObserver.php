@@ -4,6 +4,7 @@
 namespace phpfuncbot\Phpfunc;
 
 
+use phpfuncbot\Index\TrigramIndex;
 use phpfuncbot\Telegram\API;
 use phpfuncbot\Telegram\ServerObserver;
 use Psr\Log\LoggerInterface;
@@ -23,14 +24,26 @@ class PhpfuncServerObserver implements ServerObserver
      * @var LoggerInterface
      */
     private $logger;
+    /**
+     * @var \phpfuncbot\Index\TrigramIndex
+     */
+    private $trigram;
 
+    /**
+     * PhpfuncServerObserver constructor.
+     * @param API $api
+     * @param TrigramIndex $trigram
+     * @param LoggerInterface $logger
+     */
     public function __construct(
         API $api,
+        TrigramIndex $trigram,
         LoggerInterface $logger
     )
     {
         $this->api = $api;
         $this->logger = $logger;
+        $this->trigram = $trigram;
     }
 
     public function handleUpdateRequest(Update $update)
@@ -39,7 +52,7 @@ class PhpfuncServerObserver implements ServerObserver
             $query = $update->inlineQuery->query;
             $results = [];
             if ($query) {
-                $trigrams = $this->createTrigrams($query);
+                $trigrams = $this->trigram->parseForIndex($query);
             }
 
             $results = [
@@ -53,19 +66,5 @@ class PhpfuncServerObserver implements ServerObserver
             );
             $this->api->answerInlineQuery($answer);
         }
-    }
-
-    /**
-     * @param string $text
-     * @return array|string[]
-     */
-    private function createTrigrams(string $text): array
-    {
-        $trigrams = [];
-        $count = strlen($text)+2;
-        for ($i=0; $i<$count; $i++) {
-            $trigrams[] = substr($text, max($i-2, 0), min($i+1,3));
-        }
-        return $trigrams;
     }
 }

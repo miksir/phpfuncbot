@@ -1,14 +1,14 @@
 <?php
 
 
-namespace phpfuncbot\Redis;
+namespace phpfuncbot\Storage;
 
 
 use Predis\Async\Client;
 use Psr\Log\LoggerInterface;
 use React\EventLoop\LoopInterface;
 
-class ReactRedisTransport implements Transport
+class ReactRedisTransport implements StorageTransport
 {
     /**
      * @var string
@@ -55,5 +55,15 @@ class ReactRedisTransport implements Transport
     public function send()
     {
 
+    }
+
+    public function set(string $key, string $value)
+    {
+        // TODO: Implement set() method.
+    }
+
+    public function get(string $key): string
+    {
+        // TODO: Implement get() method.
     }
 }

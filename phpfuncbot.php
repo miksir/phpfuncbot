@@ -3,7 +3,7 @@ include __DIR__ . '/vendor/autoload.php';
 
 use phpfuncbot\Config\Config;
 use phpfuncbot\Config\IniLoader;
-use phpfuncbot\Index\TrigramIndex;
+use phpfuncbot\Index\TrigramRedisIndex;
 use phpfuncbot\Queue\UpdateQueue;
 use phpfuncbot\Telegram\API;
 use phpfuncbot\Telegram\ReactHttpTransport;
@@ -45,7 +45,7 @@ if (isset($opts['webhook-info'])) {
 
 if (isset($opts['server-run'])) {
     $server = new \phpfuncbot\Telegram\Server($config->getServerListen(), $config->getServerHTTPPath(), $loop, $logger);
-    $observer = new \phpfuncbot\Phpfunc\PhpfuncServerObserver($api, TrigramIndex::create(), $logger);
+    $observer = new \phpfuncbot\Phpfunc\PhpfuncServerObserver($api, TrigramRedisIndex::create(), $logger);
     $server->addServerObserver($observer);
     $server->run();
     $loop->run();

@@ -4,7 +4,7 @@
 namespace phpfuncbot\Phpfunc;
 
 
-use phpfuncbot\Index\TrigramIndex;
+use phpfuncbot\Index\TrigramRedisIndex;
 use phpfuncbot\Telegram\API;
 use phpfuncbot\Telegram\ServerObserver;
 use Psr\Log\LoggerInterface;
@@ -25,19 +25,19 @@ class PhpfuncServerObserver implements ServerObserver
      */
     private $logger;
     /**
-     * @var \phpfuncbot\Index\TrigramIndex
+     * @var \phpfuncbot\Index\TrigramRedisIndex
      */
     private $trigram;
 
     /**
      * PhpfuncServerObserver constructor.
      * @param API $api
-     * @param TrigramIndex $trigram
+     * @param TrigramRedisIndex $trigram
      * @param LoggerInterface $logger
      */
     public function __construct(
         API $api,
-        TrigramIndex $trigram,
+        TrigramRedisIndex $trigram,
         LoggerInterface $logger
     )
     {
@@ -52,7 +52,7 @@ class PhpfuncServerObserver implements ServerObserver
             $query = $update->inlineQuery->query;
             $results = [];
             if ($query) {
-                $trigrams = $this->trigram->parseForIndex($query);
+                //$trigrams = $this->trigram->parseForIndex($query);
             }
 
             $results = [

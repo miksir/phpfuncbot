@@ -2,36 +2,34 @@
 
 use phpfuncbot\Config\Config;
 use phpfuncbot\Config\IniLoader;
-use phpfuncbot\Index\TrigramIndex;
-use Predis\Client;
+use phpfuncbot\Index\TrigramRedisIndex;
 use Symfony\Component\DomCrawler\Crawler;
 
 include __DIR__ . '/../vendor/autoload.php';
 
 $config = new Config(new IniLoader(__DIR__ . '/../phpfuncbot.ini'));
-$trigramHelper = TrigramIndex::create();
+$logger = new \phpfuncbot\Logger\ConsoleLogger();
 
 $opts = getopt('', ['dir:']);
 
 if (empty($opts['dir'])) {
-    echo "Usage: {$_SERVER['argv'][0]} --dir <path to phpdoc dir>\n";
+    $logger->critical("Usage: {$_SERVER['argv'][0]} --dir <path to phpdoc dir>");
     exit(-1);
 }
 
-$client = new Client($config->getRedisServer());
-$client->flushdb();
+$transport = new \phpfuncbot\Storage\RedisTransport($config->getRedisServer(), $logger);
+$trigramIndex = new TrigramRedisIndex($transport);
+$transport->flushdb();
 
-$dir = $opts['dir'];
+$dirs = new RecursiveDirectoryIterator($opts['dir']);
+$iterator = new RecursiveIteratorIterator($dirs);
+$regexIterator = new RegexIterator($iterator, '/^class\..+\.html$/i', RecursiveRegexIterator::GET_MATCH);
+
 $id = 1;
-$dirh = opendir($dir);
-while ($file = readdir($dirh)) {
-    if (!substr($file, -5) === '.html') {
-        continue;
-    }
-    if (substr($file, 0, 6) === 'class.') {
-        continue;
-    }
-    $document = new Crawler(file_get_contents($dir . '/' . $file));
+foreach ($regexIterator as $file) {
+    $logger->info("File: {$file}");
+
+    $document = new Crawler(file_get_contents($file));
     if (!$document) {
         continue;
     }
@@ -46,9 +44,9 @@ while ($file = readdir($dirh)) {
         continue;
     }
 
-    $fnames = $headers->each(function (Crawler $header) use ($client, $trigram, $id) {
-        $header = trim(strip_tags($header->html()));;
-        echo "{$header}\n";
+    $fnames = $headers->each(function (Crawler $header) use ($logger) {
+        $header = trim(strip_tags($header->html()));
+        $logger->info("Header: {$header}");
         return $header;
     });
 
@@ -58,28 +56,24 @@ while ($file = readdir($dirh)) {
 
     $fname = null;
     foreach ($fnames as $item) {
+        $logger->info("-- {$item}");
         if (strpos($item, '::') !== false) {
-            list(,$fname) = explode('::', $item);
-            break;
+            $words = explode('::', $item);
+            $trigramIndex->createIndex($words[1], $id);
+            $trigramIndex->createIndex($words[0], $id, 'B');
+        } else {
+            $trigramIndex->createIndex($item, $id);
         }
-    }
-    if (!$fname) {
-        $fname = $fnames[0];
-    }
 
-    $trigrams = $trigramHelper->parseForIndex($fname);
-    foreach ($trigrams as $i=>$trigram) {
-        $client->rpush("tri:{$trigram}", $id);
     }
-    $client->set("tricount:{$id}", count($trigrams));
 
     $text = trim(str_replace("\n", "", strip_tags($syn->html())));
     $text = preg_replace('/\s*([()])\s*/', '\1', $text);
     $text = preg_replace('/\s*([\[\]])\s*/', '\1', $text);
     $text = preg_replace('/\s+,/', ',', $text);
-    echo "  {$text}\n";
-    $client->set("func:{$id}", $text);
+
+    $logger->info("  {$text}");
+    $trigramIndex->putDocument($id, $text);
 
     $id++;
 }
-closedir($dirh);

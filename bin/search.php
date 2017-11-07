@@ -2,13 +2,13 @@
 
 use phpfuncbot\Config\Config;
 use phpfuncbot\Config\IniLoader;
-use phpfuncbot\Index\TrigramIndex;
+use phpfuncbot\Index\TrigramRedisIndex;
 use Predis\Client;
 
 include __DIR__ . '/../vendor/autoload.php';
 
 $config = new Config(new IniLoader(__DIR__ . '/../phpfuncbot.ini'));
-$trigramHelper = TrigramIndex::create();
+$trigramHelper = TrigramRedisIndex::create();
 
 $client = new Client($config->getRedisServer());
 

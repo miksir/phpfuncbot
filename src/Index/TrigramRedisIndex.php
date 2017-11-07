@@ -4,18 +4,25 @@
 namespace phpfuncbot\Index;
 
 
-class TrigramIndex implements Index
+use phpfuncbot\Storage\StorageTransport;
+
+class TrigramRedisIndex implements Index
 {
-    static public function create()
+    /**
+     * @var StorageTransport
+     */
+    private $storageTransport;
+
+    public function __construct(StorageTransport $storageTransport)
     {
-        return new TrigramIndex();
+        $this->storageTransport = $storageTransport;
     }
 
     /**
      * @param string $text
      * @return array|string[]
      */
-    public function parseForIndex(string $text): array
+    private function createTrigrams(string $text): array
     {
         $trigrams = [];
         foreach (array_filter(preg_split('/(\s+|::|_|(?=[A-Z]))/', $text)) as $str) {
@@ -27,31 +34,36 @@ class TrigramIndex implements Index
             for ($i = 0; $i < $count; $i++) {
                 //$trigrams[] = substr($text, max($i-2, 0), min($i+1,3));
                 $index = substr($str, $i, 3);
-                $trigram[$index . ':' . $i] = 1;
+                $trigram[$index . ':' . $i] = "1";
                 if ($i !== 0) {
-                    $trigram[$index . ':' . ($i-1)] = 0.5;
+                    $trigram[$index . ':' . ($i-1)] = "2";
                 }
-                $trigram[$index . ':' . ($i+1)] = 0.5;
+                $trigram[$index . ':' . ($i+1)] = "2";
             }
             $trigrams[] = $trigram;
         }
-        print_r($trigrams);
         return $trigrams;
     }
 
-    public function createIndex(string $wordsForSearch, int $id, int $weight = 1)
+    public function createIndex(string $wordsForSearch, int $id, string $weight = "A")
     {
         if (strpos($wordsForSearch, '::') !== false) {
             $words = explode('::', $wordsForSearch);
             $this->createIndex($words[0], $id, $weight * 0.9);
             $this->createIndex($words[1], $id);
+            return;
         }
-        $wordsB = array_filter(preg_split('/(\s+|::|_|(?=[A-Z]))/', $wordsForSearch));
+        $trigrams = $this->createTrigrams($wordsForSearch);
 
     }
 
     public function searchIndex(string $wordsForSearch)
     {
         // TODO: Implement searchIndex() method.
+    }
+
+    public function putDocument(int $id, string $text)
+    {
+
     }
 }
